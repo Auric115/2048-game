@@ -37,9 +37,39 @@ CELL_COLOR_DICT = {
     512: (246, 200, 56),
     1024: (249, 197, 42),
     2048: (255, 187, 0),
-    # For tiles beyond 2048, you can use a standard color:
-    'default': (60, 58, 50)
+    4096: (61,58,50),
+    8192: (61,58,50),
+    16384: (61,58,50),
+    32768: (61,58,50),
+    65536: (61,58,50),
+    131072: (61,58,50),
 }
+
+class Cell:
+    def __init__(self, val):
+        self.value = val
+        self.merged = False
+    
+    def merge(self, cell):
+        if not self.merged and not cell.merged:
+            if self.value == cell.value:
+                self.value *= 2
+                self.merged = True
+                cell.reset()
+                return self.value
+        if self.value == 0:
+            self.value = cell.value
+            cell.reset()
+            return 0
+        
+        return -1
+    
+    def reset(self):
+        self.value = 0
+        self.merged = False
+
+    def new_round(self):
+        self.merged = False
 
 class Game:    
     def __init__(self):
@@ -54,7 +84,7 @@ class Game:
         self.score = 0
         self.high_score = 0
 
-        self.cells = [[(0) for _ in range(GRID)] for _ in range(GRID)]
+        self.cells = [[(Cell(0)) for _ in range(GRID)] for _ in range(GRID)]
 
         self.gen_new_cell()
         self.gen_new_cell()
@@ -98,56 +128,68 @@ class Game:
         for x in range(GRID):
             for y in range(GRID):
                 cell_rect = pygame.Rect(x_offset + x * (GRID_SIZE + GAP), y_offset + y * (GRID_SIZE + GAP), GRID_SIZE, GRID_SIZE)
-                if self.cells[x][y] == 0:
+                if self.cells[x][y].value == 0:
                     pygame.draw.rect(self.screen, GRID_COLOR, cell_rect, border_radius=20)
                 else:    
-                    pygame.draw.rect(self.screen, CELL_COLOR_DICT[self.cells[x][y]], cell_rect, border_radius=20)
-                    self.draw_text(f"{self.cells[x][y]}", cell_rect.centerx, cell_rect.centery, center=True)
-                
+                    pygame.draw.rect(self.screen, CELL_COLOR_DICT[self.cells[x][y].value], cell_rect, border_radius=20)
+                    self.draw_text(f"{self.cells[x][y].value}", cell_rect.centerx, cell_rect.centery, center=True)              
 
     def gen_new_cell(self):
-        empty_spots = [(x, y) for x in range(GRID) for y in range(GRID) if self.cells[x][y] == 0]
+        empty_spots = [(x, y) for x in range(GRID) for y in range(GRID) if self.cells[x][y].value == 0]
 
         if empty_spots:
             x, y = random.choice(empty_spots)
 
-            self.cells[x][y] = 2
+            self.cells[x][y].value = 2
         else:
             return -1
 
     def move(self, dir_x, dir_y):
         out = 0
-        changed_cells = [[(False) for _ in range(GRID)] for _ in range(GRID)]
+
+        for row in self.cells:
+            for cell in row:
+                cell.new_round()
+
+        if dir_x == 1:
+            x_range = (GRID - 1, -1, -1)
+        else:
+            x_range = (0, GRID)
+
+        if dir_y == 1:
+            y_range = (GRID - 1, -1, -1)
+        else:
+            y_range = (0, GRID)
 
         for _ in range(GRID):
-            for x in range(GRID):
-                for y in range(GRID):
+            for x in range(*x_range):
+                for y in range(*y_range):
                     nx, ny = x + dir_x, y + dir_y
                     if 0 <= nx < GRID and 0 <= ny < GRID:
-                        if self.cells[nx][ny] == 0:
-                            self.cells[nx][ny] = self.cells[x][y]
-                            self.cells[x][y] = 0
+                        source_cell = self.cells[x][y]
+                        target_cell = self.cells[nx][ny]
+
+                        # Attempt to merge or move the source cell into the target cell
+                        res = target_cell.merge(source_cell)
+                        if res > 0:
+                            self.score += res
+                        
+                        if res > -1:
                             out = 1
-                        elif self.cells[nx][ny] == self.cells[x][y]:
-                            if not (changed_cells[nx][ny] or changed_cells[x][y]):
-                                val = 2 * self.cells[nx][ny]
-                                self.cells[nx][ny] = val
-                                self.cells[x][y] = 0
-                                changed_cells[nx][ny] = True
-                                changed_cells[x][y] = True
-                                self.score += val
-                                out = 1
+                        
+
         return out
 
     def game_over(self):
         for x in range(GRID):
             for y in range(GRID):
-                if self.cells[x][y] == 0:
+                val = self.cells[x][y].value
+                if val == 0:
                     return False
                 
-                if x + 1 < GRID and self.cells[x][y] == self.cells[x+1][y]:
+                if x + 1 < GRID and val == self.cells[x+1][y].value:
                     return False
-                if y + 1 < GRID and self.cells[x][y] == self.cells[x][y+1]:
+                if y + 1 < GRID and val == self.cells[x][y+1].value:
                     return False
 
         return True
@@ -155,7 +197,7 @@ class Game:
     def reset(self):
         self.score = 0
 
-        self.cells = [[(0) for _ in range(GRID)] for _ in range(GRID)]
+        self.cells = [[(Cell(0)) for _ in range(GRID)] for _ in range(GRID)]
 
         self.gen_new_cell()
         self.gen_new_cell()
